@@ -21,7 +21,6 @@ Example usage in `config.py`:
     )
 
 """
-
 from typing import Any, Optional
 
 from libqtile.log_utils import logger
@@ -118,12 +117,9 @@ class HiveRewards(GenPollText):
         if self._account is None and self._hive is not None and self.account:
             try:
                 self._account = Account(self.account, blockchain_instance=self._hive)
+                self._account.refresh()
             except Exception as e:
-                logger.error(
-                    "HiveRewards: Failed to initialize Account '%s': %s",
-                    self.account,
-                    e,
-                )
+                logger.error("HiveRewards: Failed to initialize Account '%s': %s", self.account, e)
                 self._account = None
                 return False
 
@@ -154,7 +150,5 @@ class HiveRewards(GenPollText):
             }
             return self.format.format(**variables)
         except Exception as e:
-            logger.error(
-                "HiveRewards: Error retrieving rewards for '%s': %s", self.account, e
-            )
+            logger.error("HiveRewards: Error retrieving rewards for '%s': %s", self.account, e)
             return self.error_text
