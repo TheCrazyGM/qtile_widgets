@@ -1,0 +1,136 @@
+"""
+Qtile GenPollUrl widget to display SiriusXM-style "now playing" data
+by polling a JSON endpoint and formatting the response as "{title} - {artist}",
+with an optional verbose mode that prefixes the channel and appends a timestamp.
+
+Expected JSON fields in the response:
+  - title: string
+  - artist: string
+  - channel_id: string (optional)
+  - played_at_ms: integer milliseconds since epoch (optional)
+
+Example usage in config.py:
+
+    from now_playing import NowPlaying
+
+    NowPlaying(
+        channel="octane",
+        verbose=False,
+        update_interval=5,
+        foreground=colors["foreground"],
+        background=colors["background"],
+        padding=5,
+    )
+"""
+
+from typing import Any, Dict
+
+from libqtile.log_utils import logger
+from libqtile.widget.generic_poll_text import GenPollUrl
+
+
+class NowPlaying(GenPollUrl):
+    """Poll an HTTP JSON endpoint for now playing info and render text."""
+
+    defaults = [
+        (
+            "url",
+            "http://localhost:9999/now_playing?channel={channel}",
+            "Endpoint returning JSON with title/artist/channel_id/played_at_ms.",
+        ),
+        (
+            "channel",
+            "octane",
+            "The channel to query for now playing info.",
+        ),
+        (
+            "verbose",
+            False,
+            "Include channel in output.",
+        ),
+        (
+            "format",
+            "{title} - {artist}",
+            "Display format when verbose is False.",
+        ),
+        (
+            "verbose_format",
+            "[{channel}] {title} - {artist}",
+            "Display format when verbose is True.",
+        ),
+        (
+            "error_text",
+            "Now Playing: Error",
+            "Text to display when parsing fails.",
+        ),
+        (
+            "update_interval",
+            5,
+            "Seconds between polls.",
+        ),
+        (
+            "max_chars",
+            None,
+            "If set, truncate output to this many characters (with ellipsis).",
+        ),
+    ]
+
+    def __init__(self, **config: Any) -> None:
+        # Force JSON parsing in GenPollUrl so `parse` receives a dict
+        config.setdefault("json", True)
+        super().__init__(**config)
+        self.add_defaults(NowPlaying.defaults)
+        self.url_template = self.url
+        self.url = self.url_template.format(channel=self.channel)
+
+    def cmd_set_channel(self, channel: str) -> str:
+        """Qtile command: change channel and refresh. Returns active channel."""
+        self.channel = str(channel)
+        self.url = self.url_template.format(channel=self.channel)
+        try:
+            # Schedule an immediate poll to reflect the change
+            self.timeout_add(0, self.tick)
+        except Exception as e:
+            logger.error(
+                "NowPlaying: failed to schedule refresh after channel change: %s", e
+            )
+        return self.channel
+
+    def cmd_get_channel(self) -> str:
+        """Qtile command: get current channel."""
+        return self.channel
+
+    def parse(self, body: Dict[str, Any]) -> str:
+        """Parse JSON and render formatted output.
+
+        Expected keys: title, artist, optional channel_id, played_at_ms.
+        """
+        try:
+            title = str(body.get("title", "") or "").strip()
+            artist = str(body.get("artist", "") or "").strip()
+            channel = str(body.get("channel_id", "") or "").strip()
+        except Exception as e:  # Defensive: unexpected schema types
+            logger.error("NowPlaying: invalid response type: %s", e)
+            return self.error_text
+
+        if not title or not artist:
+            logger.error("NowPlaying: missing title/artist in response: %s", body)
+            return self.error_text
+
+        # Select format based on verbosity
+        tpl = self.verbose_format if self.verbose else self.format
+        text = tpl.format(
+            title=title,
+            artist=artist,
+            channel=channel,
+        )
+
+        # Optional truncation
+        if (
+            isinstance(self.max_chars, int)
+            and self.max_chars > 3
+            and len(text) > self.max_chars
+        ):
+            text = text[: self.max_chars - 1].rstrip() + "…"
+
+        return text

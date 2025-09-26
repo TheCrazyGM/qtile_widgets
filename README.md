@@ -1,15 +1,15 @@
 # Qtile Widgets
 
-## CustomMpris2 Qtile Widget
+## HivePrice Qtile Widget
 
-An enhanced MPRIS2 widget that dynamically hides the artist/title and separator when either the artist or title metadata is missing, providing a cleaner display for media players with incomplete metadata.
+Displays the current HIVE price (USD) in your Qtile bar via the CoinGecko API.
 
-### CustomMpris2 Installation
+### HivePrice Installation
 
-1. Copy `custom_mpris2.py` into `~/.config/qtile/widgets/`.
+1. Copy `qtile_hive_widget.py` into `~/.config/qtile/widgets/`.
 2. Ensure `~/.config/qtile/widgets/__init__.py` exists (can be empty).
 
-### CustomMpris2 Configuration
+### HivePrice Configuration
 
 Add the widgets directory to your `PYTHONPATH` and import the widget in `config.py`:
 
@@ -18,10 +18,10 @@ import sys
 from os.path import expanduser
 sys.path.insert(0, expanduser("~/.config/qtile/widgets"))
 
-from custom_mpris2 import CustomMpris2
+from qtile_hive_widget import HivePrice
 ```
 
-Then add `CustomMpris2` to your bar:
+Then add `HivePrice` to your bar:
 
 ```python
 from libqtile import bar, widget, Screen
@@ -30,22 +30,89 @@ screens = [
     Screen(
         bottom=bar.Bar(
             [
-                # other widgets ...
-                CustomMpris2(
-                    name='mpd',  # or any other MPRIS2-compatible player
-                    objname="org.mpris.MediaPlayer2.mpd",
-                    format='{xesam:artist} - {xesam:title}',
-                    scroll_chars=None,
-                    stop_pause_text='',
-                    **your_style_here
+                # other widgets …
+                HivePrice(
+                    update_interval=300,  # seconds
+                    fontsize=10,
+                    foreground=colors["green"],
+                    background=colors["background"],
+                    padding=5,
                 ),
-                # other widgets ...
+                # other widgets …
+            ],
+            24,
+        ),
+    ),
+]
+
+```
+
+`update_interval` defaults to 60 seconds; adjust as needed.
+
+---
+
+This widget uses CoinGecko's public API—no API key required.
+
+---
+
+## HiveRewards Qtile Widget
+
+Displays unclaimed Hive reward balances (HIVE, HBD, VESTS) for a given account using the `hive-nectar` library. Read-only; no WIF required.
+
+### HiveRewards Installation
+
+1. Ensure `hive_rewards.py` is located in `~/.config/qtile/widgets/`.
+2. Ensure `~/.config/qtile/widgets/__init__.py` exists (can be empty).
+3. Install the nectar library (in the same Python environment Qtile uses):
+
+```bash
+pip install --user git+https://github.com/thecrazygm/hive-nectar@main
+```
+
+### HiveRewards Configuration
+
+Add the widgets directory to your `PYTHONPATH` and import the widget in `config.py`:
+
+```python
+import sys
+from os.path import expanduser
+sys.path.insert(0, expanduser("~/.config/qtile/widgets"))
+
+from hive_rewards import HiveRewards
+```
+
+Then add `HiveRewards` to your bar:
+
+```python
+from libqtile import bar, widget, Screen
+
+screens = [
+    Screen(
+        top=bar.Bar(
+            [
+                # other widgets …
+                HiveRewards(
+                    account="your-hive-account",   # required
+                    # Optional:
+                    # format="{hbd} | {vests}",     # default: "R: {hive} | {hbd} | {vests}"
+                    update_interval=300,            # seconds
+                    fontsize=10,
+                    foreground=colors["green"],
+                    background=colors["background"],
+                    padding=5,
+                ),
+                # other widgets …
             ],
             24,
         ),
     ),
 ]
 ```
+
+Notes:
+
+- `reward_vesting_balance` is in VESTS. Converting to HP is not performed by default.
+- You can customize the `format` string with variables: `{hive}`, `{hbd}`, `{vests}`.
 
 ## CoinGeckoTicker Qtile Widget
 

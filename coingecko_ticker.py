@@ -87,6 +87,7 @@ class CoinGeckoTicker(GenPollUrl):
     ]
 
     def __init__(self, **config: Any):
+        config.setdefault("json", True)
         super().__init__(**config)
         self.add_defaults(CoinGeckoTicker.defaults)
 
