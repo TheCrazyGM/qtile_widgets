@@ -74,11 +74,18 @@ class NowPlaying(GenPollUrl):
             None,
             "If set, truncate output to this many characters (with ellipsis).",
         ),
+        (
+            "markup",
+            False,
+            "Whether to parse Pango markup in text (disabled to avoid parse errors).",
+        ),
     ]
 
     def __init__(self, **config: Any) -> None:
         # Force JSON parsing in GenPollUrl so `parse` receives a dict
         config.setdefault("json", True)
+        # Disable Pango markup parsing by default; raw text often contains '&', '<', etc.
+        config.setdefault("markup", False)
         super().__init__(**config)
         self.add_defaults(NowPlaying.defaults)
         self.url_template = self.url
