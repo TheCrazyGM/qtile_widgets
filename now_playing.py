@@ -25,6 +25,7 @@ Example usage in config.py:
 
 from typing import Any, Dict
 
+from libqtile.command.base import expose_command
 from libqtile.log_utils import logger
 from libqtile.widget.generic_poll_text import GenPollUrl
 
@@ -83,22 +84,39 @@ class NowPlaying(GenPollUrl):
         self.url_template = self.url
         self.url = self.url_template.format(channel=self.channel)
 
-    def cmd_set_channel(self, channel: str) -> str:
-        """Qtile command: change channel and refresh. Returns active channel."""
+    @expose_command()
+    def set_channel(self, channel: str) -> str:
+        """Change channel and refresh. Returns active channel."""
         self.channel = str(channel)
         self.url = self.url_template.format(channel=self.channel)
         try:
             # Schedule an immediate poll to reflect the change
-            self.timeout_add(0, self.tick)
+            self.refresh()
         except Exception as e:
             logger.error(
                 "NowPlaying: failed to schedule refresh after channel change: %s", e
             )
         return self.channel
 
-    def cmd_get_channel(self) -> str:
-        """Qtile command: get current channel."""
+    @expose_command()
+    def get_channel(self) -> str:
+        """Get current channel."""
         return self.channel
+
+    def refresh(self) -> None:
+        """Trigger an immediate poll and update the widget text."""
+        def _do_refresh() -> None:
+            try:
+                text = self.poll()
+                self.update(text)
+            except Exception as e:
+                logger.error("NowPlaying: refresh failed: %s", e)
+
+        # Run on the Qtile event loop to avoid threading issues
+        try:
+            self.timeout_add(0, _do_refresh)
+        except Exception as e:
+            logger.error("NowPlaying: failed to schedule refresh: %s", e)
 
     def parse(self, body: Dict[str, Any]) -> str:
         """Parse JSON and render formatted output.

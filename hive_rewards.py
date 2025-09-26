@@ -23,6 +23,7 @@ Example usage in `config.py`:
 """
 from typing import Any, Optional
 
+from libqtile.command.base import expose_command
 from libqtile.log_utils import logger
 from libqtile.widget.generic_poll_text import GenPollText
 
@@ -92,6 +93,16 @@ class HiveRewards(GenPollText):
         if not getattr(self, "account", None):
             logger.error("HiveRewards: 'account' is required.")
 
+    def timer_setup(self) -> None:
+        """Set up periodic polling and trigger an immediate refresh once loaded."""
+        # Let GenPollText set up its timer machinery
+        super().timer_setup()
+        # Kick off an immediate update so the widget isn't blank/stale until first interval
+        try:
+            self.refresh()
+        except Exception as e:
+            logger.debug("HiveRewards: initial refresh failed: %s", e)
+
     # ------------------------------------------------------------------
     # Initialization helpers
     # ------------------------------------------------------------------
@@ -118,6 +129,7 @@ class HiveRewards(GenPollText):
             try:
                 self._account = Account(self.account, blockchain_instance=self._hive)
                 self._account.refresh()
+                logger.info("HiveRewards: Account '%s' initialized.", self.account)
             except Exception as e:
                 logger.error("HiveRewards: Failed to initialize Account '%s': %s", self.account, e)
                 self._account = None
@@ -137,6 +149,11 @@ class HiveRewards(GenPollText):
             return self.error_text
 
         try:
+            # Refresh account data so reward fields reflect latest chain state
+            try:
+                self._account.refresh()
+            except Exception as e:
+                logger.debug("HiveRewards: account.refresh() failed: %s", e)
             # Access reward balances via mapping interface on Account
             # These are nectar.Amount types which stringify nicely (e.g. "0.000 HIVE").
             rh = self._account["reward_hive_balance"]
@@ -148,7 +165,29 @@ class HiveRewards(GenPollText):
                 "hbd": str(rbd),
                 "vests": str(rvests),
             }
+            logger.info(
+                "HiveRewards: polled balances for '%s': HIVE=%s, HBD=%s, VESTS=%s",
+                self.account,
+                variables["hive"],
+                variables["hbd"],
+                variables["vests"],
+            )
             return self.format.format(**variables)
         except Exception as e:
             logger.error("HiveRewards: Error retrieving rewards for '%s': %s", self.account, e)
             return self.error_text
+
+    @expose_command()
+    def refresh(self) -> None:
+        """Trigger an immediate poll and update of the widget text."""
+        def _do_refresh() -> None:
+            try:
+                text = self.poll()
+                self.update(text)
+            except Exception as e:
+                logger.error("HiveRewards: refresh failed: %s", e)
+
+        try:
+            self.timeout_add(0, _do_refresh)
+        except Exception as e:
+            logger.error("HiveRewards: failed to schedule refresh: %s", e)
