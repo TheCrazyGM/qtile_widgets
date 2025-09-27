@@ -23,6 +23,7 @@ Notes
 - Restricts swallowing to a known set of terminal WM_CLASS names. Adjust SWALLOW_TERMINALS if needed.
 """
 
+import time
 from typing import Iterable, Optional
 
 from libqtile import qtile
@@ -97,7 +98,16 @@ def _is_terminal_client(client) -> bool:
         return False
 
 
+def _format_wm_class(value) -> str:
+    if isinstance(value, (tuple, list)):
+        return " ".join(str(part) for part in value if part)
+    if value is None:
+        return ""
+    return str(value)
+
+
 def handle_client_new(client):
+    start_time = time.monotonic()
     if not SWALLOW_ENABLED:
         logger.debug("Swallow: disabled; skipping client_new")
         return
@@ -119,7 +129,7 @@ def handle_client_new(client):
     logger.debug(
         "Swallow: handling client_new pid=%s wm_class=%s",
         pid,
-        getattr(client.window, "get_wm_class", lambda: ())(),
+        client.window.get_wm_class(),
     )
 
     # Map PIDs to potential terminal windows.
@@ -164,6 +174,20 @@ def handle_client_new(client):
         # link for restoration when child dies
         setattr(client, "_swallowed_parent", parent_term)
         logger.debug("Swallow: linked parent terminal for restoration")
+
+        elapsed_ms = (time.monotonic() - start_time) * 1000.0
+        app_class = client.window.get_wm_class()
+        app_name = client.name or client.window.get_name()
+        term_class = parent_term.window.get_wm_class()
+        term_name = parent_term.name or parent_term.window.get_name()
+        logger.info(
+            "Swallow: swallowed app %s (%s) from terminal %s (%s); took %.1f ms",
+            app_name or pid,
+            _format_wm_class(app_class) or "unknown-class",
+            term_name or "unknown-terminal",
+            _format_wm_class(term_class) or "unknown-class",
+            elapsed_ms,
+        )
     except Exception as e:
         logger.warning("Swallow: failed to minimize parent terminal: %s", e)
 
