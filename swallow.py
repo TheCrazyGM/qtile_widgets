@@ -99,10 +99,12 @@ def _is_terminal_client(client) -> bool:
 
 def handle_client_new(client):
     if not SWALLOW_ENABLED:
+        logger.debug("Swallow: disabled; skipping client_new")
         return
 
     # If the new client itself is a terminal, do not swallow.
     if _is_terminal_client(client):
+        logger.debug("Swallow: new client is a terminal; skipping")
         return
 
     try:
@@ -111,13 +113,24 @@ def handle_client_new(client):
         pid = None
 
     if not pid:
+        logger.debug("Swallow: client has no PID; skipping")
         return
+
+    logger.debug(
+        "Swallow: handling client_new pid=%s wm_class=%s",
+        pid,
+        getattr(client.window, "get_wm_class", lambda: ())(),
+    )
 
     # Map PIDs to potential terminal windows.
     winmap = list(qtile.windows_map.values())
 
+    ancestry = list(_get_ancestry(int(pid)))
+    logger.debug("Swallow: ancestry for pid %s -> %s", pid, ancestry)
+
     parent_term = None
-    for anc_pid in _get_ancestry(int(pid)):
+    for anc_pid in ancestry:
+        logger.debug("Swallow: checking ancestor pid=%s", anc_pid)
         for w in winmap:
             try:
                 wpid = w.window.get_net_wm_pid()
@@ -125,20 +138,32 @@ def handle_client_new(client):
                 continue
             if not wpid or int(wpid) != int(anc_pid):
                 continue
+            wclass = None
+            try:
+                wclass = w.window.get_wm_class()
+            except Exception:
+                wclass = None
+            logger.debug(
+                "Swallow: found window for anc_pid=%s with wm_class=%s", wpid, wclass
+            )
             if _is_terminal_win(w):
+                logger.debug("Swallow: selected parent terminal window for pid=%s", pid)
                 parent_term = w
                 break
         if parent_term:
             break
 
     if not parent_term:
+        logger.debug("Swallow: no parent terminal found for pid=%s", pid)
         return
 
     try:
         if not getattr(parent_term, "minimized", False):
+            logger.debug("Swallow: minimizing parent terminal")
             parent_term.toggle_minimize()
         # link for restoration when child dies
         setattr(client, "_swallowed_parent", parent_term)
+        logger.debug("Swallow: linked parent terminal for restoration")
     except Exception as e:
         logger.warning("Swallow: failed to minimize parent terminal: %s", e)
 
@@ -146,13 +171,16 @@ def handle_client_new(client):
 def handle_client_killed(client):
     parent = getattr(client, "_swallowed_parent", None)
     if not parent:
+        logger.debug("Swallow: no linked parent on client_killed; skipping restore")
         return
 
     try:
         if getattr(parent, "minimized", False):
+            logger.debug("Swallow: restoring minimized parent terminal")
             parent.toggle_minimize()
         # Focus the parent in its group
         if parent.group:
+            logger.debug("Swallow: focusing parent terminal in its group")
             parent.group.focus(parent, False)
     except Exception as e:
         logger.warning("Swallow: failed to restore parent terminal: %s", e)
