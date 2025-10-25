@@ -1,154 +1,108 @@
 # Qtile Widgets
 
-## HivePrice Qtile Widget
+Custom Qtile widgets packaged for easy reuse. Install them directly into the
+environment Qtile runs under and import the modules like any other Python
+package.
 
-Displays the current HIVE price (USD) in your Qtile bar via the CoinGecko API.
-
-### HivePrice Installation
-
-1. Copy `qtile_hive_widget.py` into `~/.config/qtile/widgets/`.
-2. Ensure `~/.config/qtile/widgets/__init__.py` exists (can be empty).
-
-### HivePrice Configuration
-
-Install the widgets locally (Qtile must use the same environment):
+## Installation
 
 ```bash
-uv pip install -e ~/.config/qtile/widgets
+uv pip install -e .
 ```
 
-Then import and add `HivePrice` to your bar:
+The editable install exposes the modules under `widgets.*`. Any runtime
+dependencies (e.g. `hive-nectar` for Hive-related widgets) are declared in
+`pyproject.toml`.
+
+## Available widgets
+
+### `widgets.coingecko_ticker.CoinGeckoTicker`
+
+Cryptocurrency ticker backed by the CoinGecko "simple price" API.
+
+- Supports automatic ID mapping and immutable config compatible with Qtile's
+  built-in `CryptoTicker`.
+- Optional 24 h change display with dynamic colours (`foreground_up`,
+  `foreground_down`, `foreground_zero`).
+- Accepts standard `GenPollUrl` options (`update_interval`, `format`, etc.).
 
 ```python
-from libqtile import bar, widget, Screen
+from widgets.coingecko_ticker import CoinGeckoTicker
 
-screens = [
-    Screen(
-        bottom=bar.Bar(
-            [
-                # other widgets …
-                HivePrice(
-                    update_interval=300,  # seconds
-                    fontsize=10,
-                    foreground=colors["green"],
-                    background=colors["background"],
-                    padding=5,
-                ),
-                # other widgets …
-            ],
-            24,
-        ),
-    ),
-]
-
+CoinGeckoTicker(
+    crypto="HIVE",
+    show_change=True,
+    format_with_change="{crypto}: {symbol}{amount:.3f} ({change:+.2f}%)",
+    foreground_up="#50FA7B",
+    foreground_down="#FF5555",
+)
 ```
 
-`update_interval` defaults to 60 seconds; adjust as needed.
+### `widgets.custom_mpris2.CustomMpris2`
 
----
-
-This widget uses CoinGecko's public API—no API key required.
-
----
-
-## HiveRewards Qtile Widget
-
-Displays unclaimed Hive reward balances (HIVE, HBD, VESTS) for a given account using the `hive-nectar` library. Read-only; no WIF required.
-
-### HiveRewards Installation
-
-1. Ensure `hive_rewards.py` is located in `~/.config/qtile/widgets/`.
-2. Ensure `~/.config/qtile/widgets/__init__.py` exists (can be empty).
-3. Install the nectar library (in the same Python environment Qtile uses):
-
-```bash
-pip install --user git+https://github.com/thecrazygm/hive-nectar@main
-```
-
-### HiveRewards Configuration
-
-Install/update the widgets in your environment (only needs to be done once or after changes):
-
-```bash
-uv pip install -e ~/.config/qtile/widgets
-```
-
-Then import and add `HiveRewards` to your bar:
+Drop-in replacement for Qtile's `Mpris2` widget that hides separators when
+artist/title metadata is missing.
 
 ```python
-from libqtile import bar, widget, Screen
+from widgets.custom_mpris2 import CustomMpris2
 
-screens = [
-    Screen(
-        top=bar.Bar(
-            [
-                # other widgets …
-                HiveRewards(
-                    account="your-hive-account",   # required
-                    # Optional:
-                    # format="{hbd} | {vests}",     # default: "R: {hive} | {hbd} | {vests}"
-                    update_interval=300,            # seconds
-                    fontsize=10,
-                    foreground=colors["green"],
-                    background=colors["background"],
-                    padding=5,
-                ),
-                # other widgets …
-            ],
-            24,
-        ),
-    ),
-]
+CustomMpris2(format="{xesam:artist} – {xesam:title}")
 ```
 
-Notes:
+### `widgets.hive_rewards.HiveRewards`
 
-- `reward_vesting_balance` is in VESTS. Converting to HP is not performed by default.
-- You can customize the `format` string with variables: `{hive}`, `{hbd}`, `{vests}`.
+Displays unclaimed Hive reward balances (HIVE/HBD/VESTS) using the
+[`hive-nectar`](https://github.com/thecrazygm/hive-nectar) library.
 
-## CoinGeckoTicker Qtile Widget
-
-Provides real-time prices for any cryptocurrency listed on CoinGecko. It keeps the same interface as Qtile's built-in `CryptoTicker` but avoids Coinbase/Binance limits—ideal for HIVE or when those APIs are blocked.
-
-### CoinGeckoTicker Installation
-
-1. Copy `coingecko_ticker.py` into `~/.config/qtile/widgets/`.
-2. Ensure `~/.config/qtile/widgets/__init__.py` exists (can be empty).
-
-### CoinGeckoTicker Configuration
-
-Ensure the widgets are installed in the environment used by Qtile:
-
-```bash
-uv pip install -e ~/.config/qtile/widgets
-```
-
-Then import and add `CoinGeckoTicker` to your bar:
+- Requires `hive-nectar` (pulled in automatically via dependency).
+- Provides `format` option with variables `{hive}`, `{hbd}`, `{vests}`.
+- Exposes a `refresh` command to trigger immediate updates.
 
 ```python
-from libqtile import bar, widget, Screen
+from widgets.hive_rewards import HiveRewards
 
-screens = [
-    Screen(
-        bottom=bar.Bar(
-            [
-                # other widgets …
-                CoinGeckoTicker(
-                    crypto="HIVE",          # any CoinGecko-listed coin
-                    update_interval=60,      # seconds
-                    fontsize=10,
-                    foreground=colors["green"],
-                    background=colors["background"],
-                    padding=5,
-                ),
-                # other widgets …
-            ],
-            24,
-        ),
-    ),
-]
+HiveRewards(account="thecrazygm", update_interval=300)
 ```
 
-`update_interval` defaults to 60 seconds; adjust as needed.
+### `widgets.now_playing.NowPlaying`
 
-This widget uses CoinGecko's public API—no API key required.
+Polls a JSON endpoint for "now playing" data (e.g. SiriusXM) and renders a
+formatted string.
+
+- Caches an `aiohttp.ClientSession` for efficient polling.
+- Offers verbose/non-verbose formats, optional truncation via `max_chars`, and
+  `set_channel`/`get_channel` commands.
+
+```python
+from widgets.now_playing import NowPlaying
+
+NowPlaying(channel="octane", update_interval=5)
+```
+
+### `widgets.qtile_hive_widget.HivePrice`
+
+Simple CoinGecko-backed price widget tailored for HIVE.
+
+```python
+from widgets.qtile_hive_widget import HivePrice
+
+HivePrice(update_interval=120)
+```
+
+### `widgets.swallow`
+
+Helper functions for implementing terminal window swallowing in Qtile via
+hooks (`handle_client_new`, `handle_client_killed`).
+
+```python
+from widgets.swallow import handle_client_new, handle_client_killed
+
+@hook.subscribe.client_new
+def _swallow(c):
+    handle_client_new(c)
+```
+
+## Development notes
+
+- A `py.typed` marker is included so type checkers recognise inline typing.
+- Run checks via `uv tool run ruff check --fix` and `uv tool run ty check`.
