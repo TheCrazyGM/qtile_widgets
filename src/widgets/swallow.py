@@ -24,7 +24,7 @@ Notes
 """
 
 import time
-from typing import Iterable, Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Iterable, Optional, cast
 
 if TYPE_CHECKING:
     from libqtile.core.manager import Qtile
