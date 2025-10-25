@@ -112,35 +112,21 @@ Set `SWALLOW_NOTIFY = False` in `widgets.swallow` if you want to disable the
 
 ### `widgets.hive_notifications`
 
-Pair of widgets for monitoring Hive unread notifications. `HiveNotificationsSummary`
-shows a compact count, while `HiveNotificationsList` renders recent items when
-expanded.
+Compact badge that polls Hive for unread notifications and displays a count.
 
 ```python
-from widgets.hive_notifications import HiveNotificationsSummary, HiveNotificationsList
+from widgets.hive_notifications import HiveNotifications
 
-hive_summary = HiveNotificationsSummary(
+hive_notifications = HiveNotifications(
     account="thecrazygm",
     update_interval=300,
 )
 
-hive_list = HiveNotificationsList(summary=hive_summary, max_items=6)
-
-widgets = [
-    hive_summary,  # visible badge (e.g. "🔔 3")
-    widget.WidgetBox(
-        name="box_hive_notifications",
-        text_open="▾",
-        text_closed="▸",
-        widgets=[hive_list],
-    ),
-]
+widgets = [hive_notifications]
 ```
 
-Call `qtile cmd-obj -o widget hive_summary -f mark_as_read` to mark unread items
-as read (requires `ACTIVE_WIF` environment variable). `HiveNotificationsList`
-also exposes `open_notification(index=0)` to launch the associated Hive URL in a
-browser.
+Call `qtile cmd-obj -o widget hive_notifications -f mark_as_read` to clear
+unread items (requires the `ACTIVE_WIF` environment variable to be set).
 
 ## Development notes
 
