@@ -24,9 +24,10 @@ Notes
 """
 
 import time
-from typing import Iterable, Optional
+from typing import Iterable, Optional, TYPE_CHECKING, cast
 
-from libqtile import qtile
+if TYPE_CHECKING:
+    from libqtile.core.manager import Qtile
 from libqtile.log_utils import logger
 
 # Enable/disable swallowing globally
@@ -133,7 +134,12 @@ def handle_client_new(client):
     )
 
     # Map PIDs to potential terminal windows.
-    winmap = list(qtile.windows_map.values())
+    qtile_obj = getattr(client, "qtile", None)
+    if qtile_obj is None or not hasattr(qtile_obj, "windows_map"):
+        logger.debug("Swallow: client has no Qtile instance; skipping")
+        return
+
+    winmap = list(cast("Qtile", qtile_obj).windows_map.values())
 
     ancestry = list(_get_ancestry(int(pid)))
     logger.debug("Swallow: ancestry for pid %s -> %s", pid, ancestry)

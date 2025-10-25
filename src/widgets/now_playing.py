@@ -24,7 +24,7 @@ Example usage in config.py:
 """
 
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError, ContentTypeError
@@ -177,7 +177,14 @@ class NowPlaying(GenPollUrl):
                     body = await response.text()
 
             try:
-                text = self.parse(body)
+                if not isinstance(body, dict):
+                    logger.error(
+                        "NowPlaying: expected dict response, got %s",
+                        type(body).__name__,
+                    )
+                    return self.error_text
+
+                text = self.parse(cast(Dict[str, Any], body))
             except Exception as e:
                 logger.error("NowPlaying: parse error: %s", e)
                 return self.error_text
