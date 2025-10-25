@@ -11,17 +11,13 @@ Displays the current HIVE price (USD) in your Qtile bar via the CoinGecko API.
 
 ### HivePrice Configuration
 
-Add the widgets directory to your `PYTHONPATH` and import the widget in `config.py`:
+Install the widgets locally (Qtile must use the same environment):
 
-```python
-import sys
-from os.path import expanduser
-sys.path.insert(0, expanduser("~/.config/qtile/widgets"))
-
-from qtile_hive_widget import HivePrice
+```bash
+uv pip install -e ~/.config/qtile/widgets
 ```
 
-Then add `HivePrice` to your bar:
+Then import and add `HivePrice` to your bar:
 
 ```python
 from libqtile import bar, widget, Screen
@@ -71,17 +67,13 @@ pip install --user git+https://github.com/thecrazygm/hive-nectar@main
 
 ### HiveRewards Configuration
 
-Add the widgets directory to your `PYTHONPATH` and import the widget in `config.py`:
+Install/update the widgets in your environment (only needs to be done once or after changes):
 
-```python
-import sys
-from os.path import expanduser
-sys.path.insert(0, expanduser("~/.config/qtile/widgets"))
-
-from hive_rewards import HiveRewards
+```bash
+uv pip install -e ~/.config/qtile/widgets
 ```
 
-Then add `HiveRewards` to your bar:
+Then import and add `HiveRewards` to your bar:
 
 ```python
 from libqtile import bar, widget, Screen
@@ -125,17 +117,13 @@ Provides real-time prices for any cryptocurrency listed on CoinGecko. It keeps t
 
 ### CoinGeckoTicker Configuration
 
-Add the widgets directory to your `PYTHONPATH` and import the widget in `config.py`:
+Ensure the widgets are installed in the environment used by Qtile:
 
-```python
-import sys
-from os.path import expanduser
-sys.path.insert(0, expanduser("~/.config/qtile/widgets"))
-
-from coingecko_ticker import CoinGeckoTicker
+```bash
+uv pip install -e ~/.config/qtile/widgets
 ```
 
-Then add `CoinGeckoTicker` to your bar:
+Then import and add `CoinGeckoTicker` to your bar:
 
 ```python
 from libqtile import bar, widget, Screen

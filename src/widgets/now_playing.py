@@ -23,11 +23,14 @@ Example usage in config.py:
     )
 """
 
-from typing import Any, Dict
+import asyncio
+from typing import Any, Dict, Optional
 
+from aiohttp import ClientSession
+from aiohttp.client_exceptions import ClientError, ContentTypeError
 from libqtile.command.base import expose_command
 from libqtile.log_utils import logger
-from libqtile.widget.generic_poll_text import GenPollUrl
+from libqtile.widget.generic_poll_text import GenPollUrl, xmlparse
 
 
 class NowPlaying(GenPollUrl):
@@ -90,6 +93,7 @@ class NowPlaying(GenPollUrl):
         self.add_defaults(NowPlaying.defaults)
         self.url_template = self.url
         self.url = self.url_template.format(channel=self.channel)
+        self._session: Optional[ClientSession] = None
 
     @expose_command()
     def set_channel(self, channel: str) -> str:
@@ -112,6 +116,7 @@ class NowPlaying(GenPollUrl):
 
     def refresh(self) -> None:
         """Trigger an immediate poll and update the widget text."""
+
         def _do_refresh() -> None:
             try:
                 text = self.poll()
@@ -124,6 +129,88 @@ class NowPlaying(GenPollUrl):
             self.timeout_add(0, _do_refresh)
         except Exception as e:
             logger.error("NowPlaying: failed to schedule refresh: %s", e)
+
+    async def apoll(self) -> str:
+        """Custom poll with guards for non-JSON responses and failures."""
+        if not self.parse or not self.url:
+            return "Invalid config"
+
+        headers = self.headers.copy()
+        data = self.data
+        method = "POST" if data else "GET"
+
+        try:
+            session = await self._get_session()
+            async with session.request(
+                method=method, url=self.url, data=data, headers=headers
+            ) as response:
+                if response.status >= 400:
+                    logger.warning(
+                        "NowPlaying: request to %s returned HTTP %s",
+                        self.url,
+                        response.status,
+                    )
+                    return self.error_text
+
+                if self.json:
+                    content_type = response.headers.get("Content-Type", "")
+                    if "json" not in content_type.lower():
+                        logger.warning(
+                            "NowPlaying: unexpected content type '%s' from %s",
+                            content_type,
+                            self.url,
+                        )
+                        return self.error_text
+                    try:
+                        body = await response.json()
+                    except ContentTypeError as e:
+                        logger.warning(
+                            "NowPlaying: JSON decoding failed for %s: %s",
+                            self.url,
+                            e,
+                        )
+                        return self.error_text
+                elif self.xml:
+                    text_body = await response.text()
+                    body = xmlparse(text_body)
+                else:
+                    body = await response.text()
+
+            try:
+                text = self.parse(body)
+            except Exception as e:
+                logger.error("NowPlaying: parse error: %s", e)
+                return self.error_text
+        except (ClientError, asyncio.TimeoutError) as e:
+            logger.warning("NowPlaying: request failed for %s: %s", self.url, e)
+            return self.error_text
+        except Exception:
+            logger.exception("NowPlaying: unexpected error polling widget")
+            return self.error_text
+
+        return text
+
+    async def _get_session(self) -> ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = ClientSession()
+        return self._session
+
+    def finalize(self) -> None:
+        session = self._session
+        self._session = None
+
+        if session and not session.closed:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                loop.create_task(session.close())
+            else:
+                asyncio.run(session.close())
+
+        super().finalize()
 
     def parse(self, body: Dict[str, Any]) -> str:
         """Parse JSON and render formatted output.

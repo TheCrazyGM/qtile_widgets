@@ -27,7 +27,7 @@ needs.
 """
 
 import locale
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from libqtile.confreader import ConfigError
 from libqtile.log_utils import logger
@@ -49,9 +49,8 @@ _DEFAULT_ID_MAP: Dict[str, str] = {
     "DOGE": "dogecoin",
 }
 
-_API_URL = (
-    "https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies={currency}"
-)
+_API_URL = "https://api.coingecko.com/api/v3/simple/price"
+_CHANGE_SUFFIX = "_24h_change"
 
 
 class CoinGeckoTicker(GenPollUrl):
@@ -84,6 +83,36 @@ class CoinGeckoTicker(GenPollUrl):
             _DEFAULT_ID_MAP,
             "Mapping dict from ticker symbols to CoinGecko IDs.",
         ),
+        (
+            "show_change",
+            False,
+            "Show 24h percentage change when available.",
+        ),
+        (
+            "format_with_change",
+            "{crypto}: {symbol}{amount:.2f} ({change:+.2f}%)",
+            "Format string used when show_change is True and change data is available.",
+        ),
+        (
+            "foreground_up",
+            None,
+            "Hex colour for positive change (falls back to widget foreground).",
+        ),
+        (
+            "foreground_down",
+            None,
+            "Hex colour for negative change (falls back to widget foreground).",
+        ),
+        (
+            "foreground_zero",
+            None,
+            "Hex colour for neutral change (falls back to widget foreground).",
+        ),
+        (
+            "change_neutral_threshold",
+            0.0,
+            "Absolute 24h change (in %) treated as neutral when <= threshold.",
+        ),
     ]
 
     def __init__(self, **config: Any):
@@ -96,6 +125,7 @@ class CoinGeckoTicker(GenPollUrl):
             self.currency = "USD"
         if not self.symbol:
             self.symbol = "$"
+        self._base_foreground: Optional[str] = None
 
     # ---------------------------------------------------------------------
     # GenPollUrl hooks
@@ -105,7 +135,15 @@ class CoinGeckoTicker(GenPollUrl):
         # CoinGecko expects lowercase query params
         currency = self.currency.lower()
         crypto_id = self._get_crypto_id().lower()
-        return _API_URL.format(ids=crypto_id, currency=currency)
+        query = f"?ids={crypto_id}&vs_currencies={currency}"
+        if self._needs_change():
+            query += "&include_24hr_change=true"
+        return f"{_API_URL}{query}"
+
+    def _configure(self, qtile, bar):
+        super()._configure(qtile, bar)
+        # Capture the initial foreground so dynamic colour changes can restore it.
+        self._base_foreground = self.foreground
 
     def parse(self, body: Dict[str, Any]) -> str:
         """Parse CoinGecko JSON response and format for display."""
@@ -113,21 +151,64 @@ class CoinGeckoTicker(GenPollUrl):
         currency_key = self.currency.lower()
 
         try:
-            price = float(body[crypto_id][currency_key])
+            crypto_data = body[crypto_id]
+            price = float(crypto_data[currency_key])
         except (KeyError, TypeError, ValueError) as e:
             logger.error("CoinGeckoTicker: failed to parse response: %s", e)
+            self._apply_change_colour(None)
             return f"{self.crypto}: Error"
+
+        change: Optional[float] = None
+        if self._needs_change():
+            change_key = f"{currency_key}{_CHANGE_SUFFIX}"
+            raw_change = crypto_data.get(change_key)
+            if raw_change is not None:
+                try:
+                    change = float(raw_change)
+                except (TypeError, ValueError) as e:
+                    logger.warning(
+                        "CoinGeckoTicker: invalid 24h change value for %s: %s",
+                        self.crypto,
+                        e,
+                    )
+                    change = None
 
         variables = {
             "crypto": self.crypto.upper(),
             "symbol": self.symbol,
             "amount": price,
         }
-        return self.format.format(**variables)
+        if change is not None:
+            variables["change"] = change
+            variables["change_abs"] = abs(change)
+
+        self._apply_change_colour(change)
+
+        template = self.format
+        if self.show_change and change is not None:
+            template = self.format_with_change
+
+        try:
+            return template.format(**variables)
+        except KeyError as e:
+            logger.error("CoinGeckoTicker: format string error: %s", e)
+            return (
+                f"{variables['crypto']}: {variables['symbol']}{variables['amount']:.2f}"
+            )
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _needs_change(self) -> bool:
+        return self.show_change or any(
+            colour is not None
+            for colour in (
+                self.foreground_up,
+                self.foreground_down,
+                self.foreground_zero,
+            )
+        )
+
     def _get_crypto_id(self) -> str:
         """Return CoinGecko ID for the configured crypto symbol."""
         if self.crypto_id:
@@ -143,3 +224,22 @@ class CoinGeckoTicker(GenPollUrl):
             raise ConfigError(
                 "Unknown crypto symbol passed to CoinGeckoTicker and no crypto_id provided."
             )
+
+    def _apply_change_colour(self, change: Optional[float]) -> None:
+        if self._base_foreground is None:
+            self._base_foreground = getattr(self, "foreground", None)
+
+        colour: Optional[str]
+        if change is None:
+            colour = self._base_foreground
+        elif abs(change) <= self.change_neutral_threshold:
+            colour = self.foreground_zero or self._base_foreground
+        elif change > 0:
+            colour = self.foreground_up or self._base_foreground
+        else:
+            colour = self.foreground_down or self._base_foreground
+
+        if colour:
+            if getattr(self, "layout", None):
+                self.layout.colour = colour
+            self.foreground = colour

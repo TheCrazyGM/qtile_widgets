@@ -21,6 +21,7 @@ Example usage in `config.py`:
     )
 
 """
+
 from typing import Any, Optional
 
 from libqtile.command.base import expose_command
@@ -131,7 +132,11 @@ class HiveRewards(GenPollText):
                 self._account.refresh()
                 logger.info("HiveRewards: Account '%s' initialized.", self.account)
             except Exception as e:
-                logger.error("HiveRewards: Failed to initialize Account '%s': %s", self.account, e)
+                logger.error(
+                    "HiveRewards: Failed to initialize Account '%s': %s",
+                    self.account,
+                    e,
+                )
                 self._account = None
                 return False
 
@@ -174,12 +179,15 @@ class HiveRewards(GenPollText):
             )
             return self.format.format(**variables)
         except Exception as e:
-            logger.error("HiveRewards: Error retrieving rewards for '%s': %s", self.account, e)
+            logger.error(
+                "HiveRewards: Error retrieving rewards for '%s': %s", self.account, e
+            )
             return self.error_text
 
     @expose_command()
     def refresh(self) -> None:
         """Trigger an immediate poll and update of the widget text."""
+
         def _do_refresh() -> None:
             try:
                 text = self.poll()
