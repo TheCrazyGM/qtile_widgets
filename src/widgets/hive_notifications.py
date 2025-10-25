@@ -17,6 +17,7 @@ from libqtile.widget.generic_poll_text import GenPollText
 from nectar import Hive
 from nectar.account import Account
 from nectar.nodelist import NodeList
+from libqtile.popup import Popup
 
 if TYPE_CHECKING:
     from libqtile.bar import Bar
@@ -132,6 +133,17 @@ class HiveNotificationsSummary(GenPollText):
             "ACTIVE_WIF",
             "Environment variable containing ACTIVE private key to mark read (optional).",
         ),
+        ("popup_enabled", True, "Show popup window with details on click."),
+        ("popup_width", 420, "Popup width in pixels."),
+        ("popup_height", 260, "Popup height in pixels."),
+        ("popup_opacity", 0.95, "Popup window opacity."),
+        ("popup_border_width", 1, "Popup border width."),
+        ("popup_border_color", "#444444", "Popup border colour."),
+        ("popup_foreground", "#F8F8F2", "Popup text colour."),
+        ("popup_background", "#282A36", "Popup background colour."),
+        ("popup_font", "JetBrainsMono Nerd Font", "Popup font family."),
+        ("popup_fontsize", 12, "Popup font size."),
+        ("popup_padding", 10, "Popup inner padding."),
     ]
 
     def __init__(self, **config: Any) -> None:
@@ -142,6 +154,8 @@ class HiveNotificationsSummary(GenPollText):
         self._notifications: List[Dict[str, Any]] = []
         self._last_fetch: float = 0.0
         self._listeners: List["HiveNotificationsList"] = []
+        self._popup: Optional[Popup] = None
+        self._popup_visible: bool = False
 
         if not getattr(self, "account", None):
             logger.error("HiveNotificationsSummary: 'account' is required")
@@ -150,6 +164,7 @@ class HiveNotificationsSummary(GenPollText):
         super()._configure(qtile, bar)
         # Trigger an eager poll once the widget is live
         self.timeout_add(0, self.force_update)
+        self.add_callbacks({"Button1": self.toggle_popup})
 
     def register_listener(self, listener: "HiveNotificationsList") -> None:
         if listener not in self._listeners:
@@ -169,6 +184,7 @@ class HiveNotificationsSummary(GenPollText):
         count = len(notifications)
         text = self.format.format(count=count) if count else self.empty_text
         self._notify_listeners()
+        self._update_popup_content(notifications)
         return text
 
     def _fetch_notifications(self, force: bool = False) -> List[Dict[str, Any]]:
@@ -237,6 +253,100 @@ class HiveNotificationsSummary(GenPollText):
             except Exception as exc:
                 logger.debug("HiveNotificationsSummary: listener refresh failed: %s", exc)
 
+    def _ensure_popup(self) -> Optional[Popup]:
+        if not self.popup_enabled:
+            return None
+
+        if self._popup is None and self.qtile is not None:
+            try:
+                popup = Popup(
+                    self.qtile,
+                    width=int(self.popup_width),
+                    height=int(self.popup_height),
+                    opacity=float(self.popup_opacity),
+                    foreground=str(self.popup_foreground),
+                    background=str(self.popup_background),
+                    border=str(self.popup_border_color),
+                    border_width=int(self.popup_border_width),
+                    font=str(self.popup_font),
+                    fontsize=int(self.popup_fontsize),
+                    horizontal_padding=int(self.popup_padding),
+                    vertical_padding=int(self.popup_padding),
+                )
+                self._popup = popup
+            except Exception as exc:
+                logger.error("HiveNotificationsSummary: failed to create popup: %s", exc)
+                self._popup = None
+
+        return self._popup
+
+    def _update_popup_content(self, notifications: Sequence[Dict[str, Any]]) -> None:
+        popup = self._ensure_popup()
+        if popup is None:
+            return
+
+        if not notifications:
+            content = "<b>No notifications</b>"
+        else:
+            lines: List[str] = []
+            for notif in notifications[:10]:
+                notif_type, sender, date_str, message = _extract_notification_details(notif)
+                icon = _NOTIFICATION_TYPE_ICONS.get(notif_type, "•")
+                lines.append(
+                    f"<b>{icon} {sender}</b> — {message}<span foreground=\"#888888\">  {date_str}</span>"
+                )
+            if len(notifications) > 10:
+                lines.append(f"… {len(notifications) - 10} more")
+            content = "\n".join(lines)
+
+        popup.clear()
+        popup.layout.text = content
+        popup.draw_text()
+        popup.draw()
+        if self._popup_visible:
+            popup.unhide()
+            popup.place()
+
+    def _place_popup(self) -> None:
+        popup = self._ensure_popup()
+        if popup is None:
+            return
+
+        if self.bar.horizontal:
+            x = self.bar.x + int(self.offsetx)
+            y = self.bar.y + self.bar.height
+        else:
+            x = self.bar.x + self.bar.width
+            y = self.bar.y + int(self.offsety)
+
+        popup.x = x
+        popup.y = y
+        popup.place()
+
+    def show_popup(self) -> None:
+        popup = self._ensure_popup()
+        if popup is None:
+            return
+        self._place_popup()
+        popup.unhide()
+        popup.place()
+        popup.draw()
+        self._popup_visible = True
+
+    def hide_popup(self) -> None:
+        if self._popup is None:
+            return
+        self._popup.hide()
+        self._popup_visible = False
+
+    def toggle_popup(self) -> None:
+        if not self.popup_enabled:
+            return
+        if self._popup_visible:
+            self.hide_popup()
+        else:
+            self.show_popup()
+
     @expose_command()
     def mark_as_read(self) -> str:
         """Attempt to mark unread notifications as read using ACTIVE WIF."""
@@ -267,6 +377,16 @@ class HiveNotificationsSummary(GenPollText):
         except Exception as exc:
             logger.error("HiveNotificationsSummary: failed to mark notifications as read: %s", exc)
             return f"mark_as_read failed: {exc}"
+
+    def finalize(self) -> None:
+        try:
+            self.hide_popup()
+            if self._popup is not None:
+                self._popup.kill()
+        except Exception:
+            pass
+        self._popup = None
+        super().finalize()
 
 
 class HiveNotificationsList(GenPollText):
