@@ -1,7 +1,5 @@
 """Hive notifications count widget for Qtile bars."""
 
-from __future__ import annotations
-
 import os
 import time
 from typing import Any, Dict, List, Optional, Sequence, TYPE_CHECKING
