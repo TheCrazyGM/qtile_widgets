@@ -118,12 +118,12 @@ class HiveNotificationsSummary(GenPollText):
         ),
         (
             "format",
-            "\ud83d\udd14 {count}",
+            "🔔 {count}",
             "Display format when notifications exist. Variables: {count}.",
         ),
         (
             "empty_text",
-            "\u2713",
+            "✓",
             "Text to display when there are no matching notifications.",
         ),
         ("error_text", "Notifications: Error", "Fallback text on failure."),
@@ -148,8 +148,8 @@ class HiveNotificationsSummary(GenPollText):
 
     def _configure(self, qtile: Qtile, bar: Bar) -> None:
         super()._configure(qtile, bar)
-        # Trigger an eager refresh once the widget is live
-        self.timeout_add(0, self.refresh)
+        # Trigger an eager poll once the widget is live
+        self.timeout_add(0, self.force_update)
 
     def register_listener(self, listener: "HiveNotificationsList") -> None:
         if listener not in self._listeners:
@@ -262,7 +262,7 @@ class HiveNotificationsSummary(GenPollText):
             logger.info("HiveNotificationsSummary: mark_notifications_as_read result: %s", result)
             self._notifications = []
             self._last_fetch = 0.0
-            self.refresh()
+            self.force_update()
             return "Notifications marked as read"
         except Exception as exc:
             logger.error("HiveNotificationsSummary: failed to mark notifications as read: %s", exc)
