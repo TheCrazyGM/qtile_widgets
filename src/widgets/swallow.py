@@ -29,9 +29,15 @@ from typing import Iterable, Optional, TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from libqtile.core.manager import Qtile
 from libqtile.log_utils import logger
+from libqtile.utils import send_notification
 
 # Enable/disable swallowing globally
 SWALLOW_ENABLED = True
+
+# Optional notifications when swallowed terminals are restored
+SWALLOW_NOTIFY = True
+SWALLOW_NOTIFY_TITLE = "Swallow"
+SWALLOW_NOTIFY_TIMEOUT = 5000  # milliseconds
 
 # Known terminal WM_CLASS values. You can extend this list to suit your setup.
 SWALLOW_TERMINALS = {
@@ -212,5 +218,16 @@ def handle_client_killed(client):
         if parent.group:
             logger.debug("Swallow: focusing parent terminal in its group")
             parent.group.focus(parent, False)
+        if SWALLOW_NOTIFY:
+            try:
+                term_name = parent.name or parent.window.get_name()
+            except Exception:
+                term_name = None
+            message = f"Restored terminal {term_name or ''}".strip()
+            send_notification(
+                SWALLOW_NOTIFY_TITLE,
+                message,
+                timeout=SWALLOW_NOTIFY_TIMEOUT,
+            )
     except Exception as e:
         logger.warning("Swallow: failed to restore parent terminal: %s", e)

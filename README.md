@@ -100,7 +100,15 @@ from widgets.swallow import handle_client_new, handle_client_killed
 @hook.subscribe.client_new
 def _swallow(c):
     handle_client_new(c)
+
+@hook.subscribe.client_killed
+def _unswallow(c):
+    handle_client_killed(c)
 ```
+
+Set `SWALLOW_NOTIFY = False` in `widgets.swallow` if you want to disable the
+"terminal restored" desktop notification, or adjust `SWALLOW_NOTIFY_TITLE` and
+`SWALLOW_NOTIFY_TIMEOUT` to suit your preference.
 
 ## Development notes
 
