@@ -110,6 +110,38 @@ Set `SWALLOW_NOTIFY = False` in `widgets.swallow` if you want to disable the
 "terminal restored" desktop notification, or adjust `SWALLOW_NOTIFY_TITLE` and
 `SWALLOW_NOTIFY_TIMEOUT` to suit your preference.
 
+### `widgets.hive_notifications`
+
+Pair of widgets for monitoring Hive unread notifications. `HiveNotificationsSummary`
+shows a compact count, while `HiveNotificationsList` renders recent items when
+expanded.
+
+```python
+from widgets.hive_notifications import HiveNotificationsSummary, HiveNotificationsList
+
+hive_summary = HiveNotificationsSummary(
+    account="thecrazygm",
+    update_interval=300,
+)
+
+hive_list = HiveNotificationsList(summary=hive_summary, max_items=6)
+
+widgets = [
+    hive_summary,  # visible badge (e.g. "🔔 3")
+    widget.WidgetBox(
+        name="box_hive_notifications",
+        text_open="▾",
+        text_closed="▸",
+        widgets=[hive_list],
+    ),
+]
+```
+
+Call `qtile cmd-obj -o widget hive_summary -f mark_as_read` to mark unread items
+as read (requires `ACTIVE_WIF` environment variable). `HiveNotificationsList`
+also exposes `open_notification(index=0)` to launch the associated Hive URL in a
+browser.
+
 ## Development notes
 
 - A `py.typed` marker is included so type checkers recognise inline typing.
