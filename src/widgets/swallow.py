@@ -7,7 +7,7 @@ Behavior
 
 Usage
 - Place this file in ~/.config/qtile/widgets/swallow.py
-- In your config.py: `from swallow import handle_client_new, handle_client_killed`
+- In your config.py: `from widgets.swallow import handle_client_new, handle_client_killed`
 - Then wire hooks in config.py:
 
     @hook.subscribe.client_new

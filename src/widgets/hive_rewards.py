@@ -6,11 +6,7 @@ Displays the current unclaimed reward balances for a Hive account using the
 
 Example usage in `config.py`:
 
-    import sys
-    from os.path import expanduser
-    sys.path.insert(0, expanduser("~/.config/qtile/widgets"))
-
-    from hive_rewards import HiveRewards
+    from widgets.hive_rewards import HiveRewards
 
     HiveRewards(
         account="your-hive-account",

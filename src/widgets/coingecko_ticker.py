@@ -10,7 +10,7 @@ fetched from CoinGecko's public API.
 
 Example usage (in your `config.py`):
 
-    from qtile_extras.widget.coingecko_ticker import CoinGeckoTicker
+    from widget.coingecko_ticker import CoinGeckoTicker
 
     widgets = [
         CoinGeckoTicker(),                             # BTC -> local currency

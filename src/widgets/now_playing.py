@@ -11,7 +11,7 @@ Expected JSON fields in the response:
 
 Example usage in config.py:
 
-    from now_playing import NowPlaying
+    from widgets.now_playing import NowPlaying
 
     NowPlaying(
         channel="octane",
