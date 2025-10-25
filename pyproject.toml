@@ -1,6 +1,6 @@
 [project]
 name = "widgets"
-version = "0.2.2"
+version = "0.2.3"
 description = "My personal Qtile Widgets"
 readme = "README.md"
 authors = [{ name = "Michael Garcia", email = "thecrazygm@gmail.com" }]
