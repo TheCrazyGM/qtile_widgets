@@ -2,12 +2,11 @@
 
 import os
 import time
-from typing import Any, Dict, List, Optional, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 
 from libqtile.command.base import expose_command
 from libqtile.log_utils import logger
 from libqtile.widget.generic_poll_text import GenPollText
-
 from nectar import Hive
 from nectar.account import Account
 from nectar.nodelist import NodeList
@@ -21,8 +20,6 @@ _HIVE_DEFAULT_NODES: Sequence[str] = (
     "https://api.syncad.com",
     "https://api.hive.blog",
 )
-
- 
 
 
 class HiveNotifications(GenPollText):
@@ -91,7 +88,8 @@ class HiveNotifications(GenPollText):
         if (
             not force
             and self._notifications
-            and (time.time() - self._last_fetch) < max(float(self.update_interval or 0), 1.0)
+            and (time.time() - self._last_fetch)
+            < max(float(self.update_interval or 0), 1.0)
         ):
             return self._notifications
 
@@ -104,7 +102,9 @@ class HiveNotifications(GenPollText):
                 limit=int(self.limit or 50),
             )
         except Exception as exc:
-            logger.error("HiveNotificationsSummary: failed to fetch notifications: %s", exc)
+            logger.error(
+                "HiveNotificationsSummary: failed to fetch notifications: %s", exc
+            )
             raise
 
         if not isinstance(notifications, list):
@@ -134,7 +134,9 @@ class HiveNotifications(GenPollText):
 
             account = Account(str(self.account), blockchain_instance=hivex)
         except Exception as exc:
-            logger.error("HiveNotificationsSummary: failed to init Hive client: %s", exc)
+            logger.error(
+                "HiveNotificationsSummary: failed to init Hive client: %s", exc
+            )
             self._account = None
             self._hive = None
             return False
@@ -165,11 +167,16 @@ class HiveNotifications(GenPollText):
             client = Hive(keys=wif, node=self.nodes)
             account = Account(str(self.account), blockchain_instance=client)
             result = account.mark_notifications_as_read()
-            logger.info("HiveNotificationsSummary: mark_notifications_as_read result: %s", result)
+            logger.info(
+                "HiveNotificationsSummary: mark_notifications_as_read result: %s",
+                result,
+            )
             self._notifications = []
             self._last_fetch = 0.0
             self.force_update()
             return "Notifications marked as read"
         except Exception as exc:
-            logger.error("HiveNotifications: failed to mark notifications as read: %s", exc)
+            logger.error(
+                "HiveNotifications: failed to mark notifications as read: %s", exc
+            )
             return f"mark_as_read failed: {exc}"
