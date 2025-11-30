@@ -35,7 +35,7 @@ from libqtile.utils import send_notification
 SWALLOW_ENABLED = True
 
 # Optional notifications when swallowed terminals are restored
-SWALLOW_NOTIFY = True
+SWALLOW_NOTIFY = False
 SWALLOW_NOTIFY_TITLE = "Swallow"
 SWALLOW_NOTIFY_TIMEOUT = 5000  # milliseconds
 
