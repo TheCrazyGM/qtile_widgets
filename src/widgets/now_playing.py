@@ -39,7 +39,7 @@ class NowPlaying(GenPollUrl):
     defaults = [
         (
             "url",
-            "http://localhost:9999/now_playing?channel={channel}",
+            "http://localhost:9999/api/metadata/{channel}",
             "Endpoint returning JSON with title/artist/channel_id/played_at_ms.",
         ),
         (
