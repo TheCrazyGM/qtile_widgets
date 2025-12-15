@@ -166,13 +166,6 @@ class HiveRewards(GenPollText):
                 "hbd": str(rbd),
                 "vests": str(rvests),
             }
-            logger.info(
-                "HiveRewards: polled balances for '%s': HIVE=%s, HBD=%s, VESTS=%s",
-                self.account,
-                variables["hive"],
-                variables["hbd"],
-                variables["vests"],
-            )
             return self.format.format(**variables)
         except Exception as e:
             logger.error(
