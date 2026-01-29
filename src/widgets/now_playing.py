@@ -30,7 +30,7 @@ from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError, ContentTypeError
 from libqtile.command.base import expose_command
 from libqtile.log_utils import logger
-from libqtile.widget.generic_poll_text import GenPollUrl, xmlparse
+from libqtile.widget.gen_poll_url import GenPollUrl, xmlparse
 
 
 class NowPlaying(GenPollUrl):
