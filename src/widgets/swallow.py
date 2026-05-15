@@ -42,6 +42,8 @@ SWALLOW_NOTIFY_TIMEOUT = 5000  # milliseconds
 # Known terminal WM_CLASS values. You can extend this list to suit your setup.
 SWALLOW_TERMINALS = {
     "Alacritty",
+    "ghostty",
+    "com.mitchellh.ghostty",
     "kitty",
     "WezTerm",
     "wezterm",
