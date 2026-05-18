@@ -98,7 +98,9 @@ class NowPlaying(GenPollUrl):
     @expose_command()
     def set_channel(self, channel: str) -> str:
         """Change channel and refresh. Returns active channel."""
-        self.channel = str(channel)
+        # Sanitize input to prevent SSRF/path traversal in the URL
+        import re
+        self.channel = re.sub(r"[^a-zA-Z0-9_-]", "", str(channel))
         self.url = self.url_template.format(channel=self.channel)
         try:
             # Schedule an immediate poll to reflect the change
