@@ -100,6 +100,7 @@ class NowPlaying(GenPollUrl):
         """Change channel and refresh. Returns active channel."""
         # Sanitize input to prevent SSRF/path traversal in the URL
         import re
+
         self.channel = re.sub(r"[^a-zA-Z0-9_-]", "", str(channel))
         self.url = self.url_template.format(channel=self.channel)
         try:

@@ -91,6 +91,18 @@ def _get_ancestry(pid: int, limit: int = MAX_ANCESTRY_DEPTH) -> Iterable[int]:
         current = ppid
 
 
+def _get_windowid_from_environ(pid: int) -> Optional[int]:
+    """Extract WINDOWID from the environment variables of a process."""
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as f:
+            for item in f.read().split(b"\0"):
+                if item.startswith(b"WINDOWID="):
+                    return int(item.split(b"=")[1])
+    except Exception:
+        pass
+    return None
+
+
 def _is_terminal_win(win) -> bool:
     try:
         wm_class = win.window.get_wm_class() or ()
@@ -149,33 +161,54 @@ def handle_client_new(client):
 
     winmap = list(cast("Qtile", qtile_obj).windows_map.values())
 
-    ancestry = list(_get_ancestry(int(pid)))
-    logger.debug("Swallow: ancestry for pid %s -> %s", pid, ancestry)
-
     parent_term = None
-    for anc_pid in ancestry:
-        logger.debug("Swallow: checking ancestor pid=%s", anc_pid)
+
+    # First attempt: Try to find the exact terminal window by WINDOWID environment variable.
+    wid = _get_windowid_from_environ(int(pid))
+    if wid is not None:
+        logger.debug("Swallow: found WINDOWID=%s in environ for pid=%s", wid, pid)
         for w in winmap:
-            try:
-                wpid = w.window.get_net_wm_pid()
-            except Exception:
-                continue
-            if not wpid or int(wpid) != int(anc_pid):
-                continue
-            wclass = None
-            try:
-                wclass = w.window.get_wm_class()
-            except Exception:
-                wclass = None
-            logger.debug(
-                "Swallow: found window for anc_pid=%s with wm_class=%s", wpid, wclass
-            )
-            if _is_terminal_win(w):
-                logger.debug("Swallow: selected parent terminal window for pid=%s", pid)
-                parent_term = w
+            w_obj = getattr(w, "window", None)
+            if w_obj and getattr(w_obj, "wid", None) == wid:
+                if _is_terminal_win(w):
+                    logger.debug("Swallow: selected parent terminal by WINDOWID")
+                    parent_term = w
                 break
-        if parent_term:
-            break
+
+    # Second attempt: Fallback to ancestry tracing
+    if not parent_term:
+        ancestry = list(_get_ancestry(int(pid)))
+        logger.debug("Swallow: ancestry for pid %s -> %s", pid, ancestry)
+
+        for anc_pid in ancestry:
+            logger.debug("Swallow: checking ancestor pid=%s", anc_pid)
+            for w in winmap:
+                if not hasattr(w, "window"):
+                    continue
+                try:
+                    wpid = w.window.get_net_wm_pid()
+                except Exception:
+                    continue
+                if not wpid or int(wpid) != int(anc_pid):
+                    continue
+                wclass = None
+                try:
+                    wclass = w.window.get_wm_class()
+                except Exception:
+                    wclass = None
+                logger.debug(
+                    "Swallow: found window for anc_pid=%s with wm_class=%s",
+                    wpid,
+                    wclass,
+                )
+                if _is_terminal_win(w):
+                    logger.debug(
+                        "Swallow: selected parent terminal window for pid=%s", pid
+                    )
+                    parent_term = w
+                    break
+            if parent_term:
+                break
 
     if not parent_term:
         logger.debug("Swallow: no parent terminal found for pid=%s", pid)
