@@ -7,7 +7,7 @@ Behavior
 
 Usage
 - Place this file in ~/.config/qtile/widgets/swallow.py
-- In your config.py: `from widgets.swallow import handle_client_new, handle_client_killed`
+- In your config.py: \`from widgets.swallow import handle_client_new, handle_client_killed\`
 - Then wire hooks in config.py:
 
     @hook.subscribe.client_new
@@ -79,7 +79,7 @@ def _get_ppid(pid: int) -> Optional[int]:
 
 
 def _get_ancestry(pid: int, limit: int = MAX_ANCESTRY_DEPTH) -> Iterable[int]:
-    """Yield PIDs from child->...->root up to `limit` steps (exclusive of 0/1)."""
+    """Yield PIDs from child->...->root up to \`limit\` steps (exclusive of 0/1)."""
     seen = set()
     current = pid
     for _ in range(limit):
@@ -128,10 +128,20 @@ def _format_wm_class(value) -> str:
 
 
 def handle_client_new(client):
-    start_time = time.monotonic()
+
+    # Called when a new client window is created.
+    # Uses a small delay to ensure window properties (like WM_CLASS) are populated.
     if not SWALLOW_ENABLED:
-        logger.debug("Swallow: disabled; skipping client_new")
         return
+
+    qtile = getattr(client, "qtile", None)
+    if qtile:
+        # 50ms delay is usually enough for X11 properties to sync
+        qtile.call_later(0.05, _do_swallow, client)
+
+
+def _do_swallow(client):
+    start_time = time.monotonic()
 
     # If the new client itself is a terminal, do not swallow.
     if _is_terminal_client(client):
