@@ -103,6 +103,18 @@ def _get_windowid_from_environ(pid: int) -> Optional[int]:
     return None
 
 
+def _find_windowid_in_ancestry(pid: int) -> Optional[int]:
+    """Search for WINDOWID in the environment of the process and its ancestors."""
+    wid = _get_windowid_from_environ(pid)
+    if wid is not None:
+        return wid
+    for anc_pid in _get_ancestry(pid):
+        wid = _get_windowid_from_environ(anc_pid)
+        if wid is not None:
+            return wid
+    return None
+
+
 def _is_terminal_win(win) -> bool:
     try:
         wm_class = win.window.get_wm_class() or ()
@@ -173,10 +185,10 @@ def _do_swallow(client):
 
     parent_term = None
 
-    # First attempt: Try to find the exact terminal window by WINDOWID environment variable.
-    wid = _get_windowid_from_environ(int(pid))
+    # First attempt: Try to find the exact terminal window by checking WINDOWID in the process or its ancestry.
+    wid = _find_windowid_in_ancestry(int(pid))
     if wid is not None:
-        logger.debug("Swallow: found WINDOWID=%s in environ for pid=%s", wid, pid)
+        logger.debug("Swallow: found WINDOWID=%s in ancestry for pid=%s", wid, pid)
         for w in winmap:
             w_obj = getattr(w, "window", None)
             if w_obj and getattr(w_obj, "wid", None) == wid:
@@ -185,13 +197,35 @@ def _do_swallow(client):
                     parent_term = w
                 break
 
-    # Second attempt: Fallback to ancestry tracing
+    # Second attempt: Fallback to ancestry tracing, but only if the terminal PID is unique.
     if not parent_term:
         ancestry = list(_get_ancestry(int(pid)))
         logger.debug("Swallow: ancestry for pid %s -> %s", pid, ancestry)
 
+        # Count terminal windows sharing each PID in the window map
+        pid_counts = {}
+        for w in winmap:
+            if not hasattr(w, "window"):
+                continue
+            try:
+                wpid = w.window.get_net_wm_pid()
+                if wpid:
+                    wpid = int(wpid)
+                    pid_counts[wpid] = pid_counts.get(wpid, 0) + 1
+            except Exception:
+                continue
+
         for anc_pid in ancestry:
             logger.debug("Swallow: checking ancestor pid=%s", anc_pid)
+            # If the ancestor PID is shared by multiple windows (e.g. shared terminal daemon PID),
+            # it is ambiguous. Skip it to avoid incorrect swallowing.
+            if pid_counts.get(anc_pid, 0) > 1:
+                logger.debug(
+                    "Swallow: ancestor pid=%s is shared by multiple windows; skipping PID fallback",
+                    anc_pid,
+                )
+                continue
+
             for w in winmap:
                 if not hasattr(w, "window"):
                     continue
