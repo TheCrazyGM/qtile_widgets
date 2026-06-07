@@ -54,12 +54,12 @@ class NowPlaying(GenPollUrl):
         ),
         (
             "format",
-            "{title} - {artist}",
+            "{artist} - {title}",
             "Display format when verbose is False.",
         ),
         (
             "verbose_format",
-            "[{channel}] {title} - {artist}",
+            "[{channel}] {artist} - {title}",
             "Display format when verbose is True.",
         ),
         (
