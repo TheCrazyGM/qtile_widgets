@@ -26,9 +26,13 @@ it via the ``crypto_id`` kwarg if the default mapping does not suit your
 needs.
 """
 
+import asyncio
 import locale
-from typing import Any, Dict, Optional
+import os
+from typing import Any
 
+import aiohttp
+from aiohttp.client_exceptions import ClientError, ContentTypeError
 from libqtile.confreader import ConfigError
 from libqtile.log_utils import logger
 from libqtile.widget.gen_poll_url import GenPollUrl
@@ -38,7 +42,7 @@ _DEFAULT_SYMBOL = str(locale.localeconv()["currency_symbol"]) or "$"
 
 # Minimal mapping between common ticker symbols and CoinGecko IDs.
 # Users can extend/override this with the ``crypto_id`` kwarg.
-_DEFAULT_ID_MAP: Dict[str, str] = {
+_DEFAULT_ID_MAP: dict[str, str] = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
     "LTC": "litecoin",
@@ -56,7 +60,7 @@ _CHANGE_SUFFIX = "_24h_change"
 class CoinGeckoTicker(GenPollUrl):
     """A cryptocurrency ticker that fetches prices from CoinGecko."""
 
-    defaults = [
+    defaults = [  # noqa: RUF012
         (
             "currency",
             _DEFAULT_CURRENCY,
@@ -113,6 +117,21 @@ class CoinGeckoTicker(GenPollUrl):
             0.0,
             "Absolute 24h change (in %) treated as neutral when <= threshold.",
         ),
+        (
+            "api_key",
+            None,
+            "CoinGecko API key (Demo or Pro). If None, checks COINGECKO_API_KEY environment variable.",
+        ),
+        (
+            "is_pro",
+            False,
+            "Whether the API key is a Pro API key (uses pro-api.coingecko.com).",
+        ),
+        (
+            "retain_on_error",
+            True,
+            "Keep the last successfully fetched price if a temporary error occurs.",
+        ),
     ]
 
     def __init__(self, **config: Any):
@@ -125,27 +144,166 @@ class CoinGeckoTicker(GenPollUrl):
             self.currency = "USD"
         if not self.symbol:
             self.symbol = "$"
-        self._base_foreground: Optional[str] = None
+        if self.api_key is None:
+            self.api_key = os.environ.get("COINGECKO_API_KEY")
+        self._base_foreground: str | None = None
+        self._last_rendered: str | None = None
+        self._session: aiohttp.ClientSession | None = None
 
     # ---------------------------------------------------------------------
     # GenPollUrl hooks
     # ---------------------------------------------------------------------
     @property
     def url(self) -> str:
-        # CoinGecko expects lowercase query params
+        base = "https://pro-api.coingecko.com/api/v3/simple/price" if self.is_pro else _API_URL
         currency = self.currency.lower()
         crypto_id = self._get_crypto_id().lower()
         query = f"?ids={crypto_id}&vs_currencies={currency}"
         if self._needs_change():
             query += "&include_24hr_change=true"
-        return f"{_API_URL}{query}"
+        return f"{base}{query}"
+
+    async def apoll(self) -> str:
+        """Fetch price from CoinGecko with graceful error handling and API key support."""
+        if not self.parse or not self.url:
+            return "Invalid config"
+
+        headers = self.headers.copy()
+        if self.api_key:
+            header_name = "x-cg-pro-api-key" if self.is_pro else "x-cg-demo-api-key"
+            headers[header_name] = self.api_key
+        headers.setdefault("User-Agent", "Mozilla/5.0 (compatible; QtileCoinGeckoTicker/1.0)")
+        headers.setdefault("Accept", "application/json")
+
+        try:
+            session = await self._get_session()
+            async with session.request(
+                method="GET", url=self.url, headers=headers
+            ) as response:
+                if response.status == 429:
+                    logger.warning(
+                        "CoinGeckoTicker (%s): rate limited (HTTP 429).",
+                        self.crypto,
+                    )
+                    return (
+                        self._last_rendered
+                        if (self.retain_on_error and self._last_rendered)
+                        else f"{self.crypto}: Rate Limited"
+                    )
+
+                if response.status in (401, 403):
+                    logger.warning(
+                        "CoinGeckoTicker (%s): access blocked (HTTP %s). CoinGecko requires an API key.",
+                        self.crypto,
+                        response.status,
+                    )
+                    return (
+                        self._last_rendered
+                        if (self.retain_on_error and self._last_rendered)
+                        else f"{self.crypto}: Key Req"
+                    )
+
+                if response.status >= 400:
+                    logger.warning(
+                        "CoinGeckoTicker (%s): request to %s returned HTTP %s",
+                        self.crypto,
+                        self.url,
+                        response.status,
+                    )
+                    return (
+                        self._last_rendered
+                        if (self.retain_on_error and self._last_rendered)
+                        else f"{self.crypto}: Err {response.status}"
+                    )
+
+                content_type = response.headers.get("Content-Type", "")
+                if "json" not in content_type.lower():
+                    logger.warning(
+                        "CoinGeckoTicker (%s): unexpected content type '%s' from %s",
+                        self.crypto,
+                        content_type,
+                        self.url,
+                    )
+                    return (
+                        self._last_rendered
+                        if (self.retain_on_error and self._last_rendered)
+                        else f"{self.crypto}: Err"
+                    )
+
+                try:
+                    body = await response.json()
+                except ContentTypeError as e:
+                    logger.warning(
+                        "CoinGeckoTicker (%s): JSON decoding failed: %s",
+                        self.crypto,
+                        e,
+                    )
+                    return (
+                        self._last_rendered
+                        if (self.retain_on_error and self._last_rendered)
+                        else f"{self.crypto}: Err"
+                    )
+
+            if not isinstance(body, dict):
+                logger.error(
+                    "CoinGeckoTicker (%s): expected dict response, got %s",
+                    self.crypto,
+                    type(body).__name__,
+                )
+                return (
+                    self._last_rendered
+                    if (self.retain_on_error and self._last_rendered)
+                    else f"{self.crypto}: Err"
+                )
+
+            text = self.parse(body)
+            if not text.endswith(": Error"):
+                self._last_rendered = text
+            return text
+
+        except (TimeoutError, ClientError) as e:
+            logger.warning("CoinGeckoTicker (%s): request failed: %s", self.crypto, e)
+            return (
+                self._last_rendered
+                if (self.retain_on_error and self._last_rendered)
+                else f"{self.crypto}: Err"
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("CoinGeckoTicker (%s): unexpected error polling widget", self.crypto)
+            return (
+                self._last_rendered
+                if (self.retain_on_error and self._last_rendered)
+                else f"{self.crypto}: Err"
+            )
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+        return self._session
+
+    def finalize(self) -> None:
+        session = self._session
+        self._session = None
+        if session and not session.closed:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                loop.create_task(session.close())
+            else:
+                asyncio.run(session.close())
+        try:
+            super().finalize()
+        except AttributeError:
+            pass
 
     def _configure(self, qtile, bar):
         super()._configure(qtile, bar)
         # Capture the initial foreground so dynamic colour changes can restore it.
         self._base_foreground = self.foreground
 
-    def parse(self, body: Dict[str, Any]) -> str:
+    def parse(self, body: dict[str, Any]) -> str:
         """Parse CoinGecko JSON response and format for display."""
         crypto_id = self._get_crypto_id().lower()
         currency_key = self.currency.lower()
@@ -158,7 +316,7 @@ class CoinGeckoTicker(GenPollUrl):
             self._apply_change_colour(None)
             return f"{self.crypto}: Error"
 
-        change: Optional[float] = None
+        change: float | None = None
         if self._needs_change():
             change_key = f"{currency_key}{_CHANGE_SUFFIX}"
             raw_change = crypto_data.get(change_key)
@@ -225,11 +383,11 @@ class CoinGeckoTicker(GenPollUrl):
                 "Unknown crypto symbol passed to CoinGeckoTicker and no crypto_id provided."
             )
 
-    def _apply_change_colour(self, change: Optional[float]) -> None:
+    def _apply_change_colour(self, change: float | None) -> None:
         if self._base_foreground is None:
             self._base_foreground = getattr(self, "foreground", None)
 
-        colour: Optional[str]
+        colour: str | None
         if change is None:
             colour = self._base_foreground
         elif abs(change) <= self.change_neutral_threshold:
