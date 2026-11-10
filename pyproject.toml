@@ -7,6 +7,7 @@ authors = [{ name = "Michael Garcia", email = "thecrazygm@gmail.com" }]
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp",
+    "coincurve",
     "dbus-fast",
     "hive-nectar",
     "qtile",
@@ -18,3 +19,17 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 hive-nectar = { git = "https://github.com/srbde/hive-nectar", rev = "main" }
+coincurve = { git = "https://github.com/ofek/coincurve", rev = "master" }
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+ignore = [
+    "BLE001",  # Blind exception catching is intentional in Qtile widgets to avoid crashing the WM
+    "RUF012",  # Mutable class attributes (defaults = [...]) are the Qtile widget standard
+    "S110",    # try-except-pass in defensive window/X11 inspection
+    "S112",    # try-except-continue in process/window iteration
+]
+

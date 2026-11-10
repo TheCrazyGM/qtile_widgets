@@ -1,4 +1,4 @@
-"""
+r"""
 Terminal swallowing utilities for Qtile (X11).
 
 Behavior
@@ -24,7 +24,8 @@ Notes
 """
 
 import time
-from typing import TYPE_CHECKING, Iterable, Optional, cast
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from libqtile.core.manager import Qtile
@@ -63,7 +64,7 @@ SWALLOW_TERMINALS = {
 MAX_ANCESTRY_DEPTH = 8
 
 
-def _get_ppid(pid: int) -> Optional[int]:
+def _get_ppid(pid: int) -> int | None:
     """Return parent PID from /proc/<pid>/status or None if unavailable."""
     try:
         with open(f"/proc/{pid}/status", "r", encoding="utf-8", errors="ignore") as f:
@@ -79,7 +80,7 @@ def _get_ppid(pid: int) -> Optional[int]:
 
 
 def _get_ancestry(pid: int, limit: int = MAX_ANCESTRY_DEPTH) -> Iterable[int]:
-    """Yield PIDs from child->...->root up to \`limit\` steps (exclusive of 0/1)."""
+    r"""Yield PIDs from child->...->root up to \`limit\` steps (exclusive of 0/1)."""
     seen = set()
     current = pid
     for _ in range(limit):
@@ -91,7 +92,7 @@ def _get_ancestry(pid: int, limit: int = MAX_ANCESTRY_DEPTH) -> Iterable[int]:
         current = ppid
 
 
-def _get_windowid_from_environ(pid: int) -> Optional[int]:
+def _get_windowid_from_environ(pid: int) -> int | None:
     """Extract WINDOWID from the environment variables of a process."""
     try:
         with open(f"/proc/{pid}/environ", "rb") as f:
@@ -103,7 +104,7 @@ def _get_windowid_from_environ(pid: int) -> Optional[int]:
     return None
 
 
-def _find_windowid_in_ancestry(pid: int) -> Optional[int]:
+def _find_windowid_in_ancestry(pid: int) -> int | None:
     """Search for WINDOWID in the environment of the process and its ancestors."""
     wid = _get_windowid_from_environ(pid)
     if wid is not None:
@@ -205,10 +206,11 @@ def _do_swallow(client):
         # Count terminal windows sharing each PID in the window map
         pid_counts = {}
         for w in winmap:
-            if not hasattr(w, "window"):
+            win_obj = getattr(w, "window", None)
+            if win_obj is None:
                 continue
             try:
-                wpid = w.window.get_net_wm_pid()
+                wpid = win_obj.get_net_wm_pid()
                 if wpid:
                     wpid = int(wpid)
                     pid_counts[wpid] = pid_counts.get(wpid, 0) + 1
@@ -227,17 +229,18 @@ def _do_swallow(client):
                 continue
 
             for w in winmap:
-                if not hasattr(w, "window"):
+                win_obj = getattr(w, "window", None)
+                if win_obj is None:
                     continue
                 try:
-                    wpid = w.window.get_net_wm_pid()
+                    wpid = win_obj.get_net_wm_pid()
                 except Exception:
                     continue
                 if not wpid or int(wpid) != int(anc_pid):
                     continue
                 wclass = None
                 try:
-                    wclass = w.window.get_wm_class()
+                    wclass = win_obj.get_wm_class()
                 except Exception:
                     wclass = None
                 logger.debug(
@@ -259,18 +262,20 @@ def _do_swallow(client):
         return
 
     try:
-        if not getattr(parent_term, "minimized", False):
+        toggle_min = getattr(parent_term, "toggle_minimize", None)
+        if callable(toggle_min) and not getattr(parent_term, "minimized", False):
             logger.debug("Swallow: minimizing parent terminal")
-            parent_term.toggle_minimize()
+            toggle_min()
         # link for restoration when child dies
-        setattr(client, "_swallowed_parent", parent_term)
+        client._swallowed_parent = parent_term
         logger.debug("Swallow: linked parent terminal for restoration")
 
         elapsed_ms = (time.monotonic() - start_time) * 1000.0
         app_class = client.window.get_wm_class()
         app_name = client.name or client.window.get_name()
-        term_class = parent_term.window.get_wm_class()
-        term_name = parent_term.name or parent_term.window.get_name()
+        parent_win = getattr(parent_term, "window", None)
+        term_class = parent_win.get_wm_class() if parent_win else None
+        term_name = parent_term.name or (parent_win.get_name() if parent_win else None)
         logger.info(
             "Swallow: swallowed app %s (%s) from terminal %s (%s); took %.1f ms",
             app_name or pid,

@@ -2,7 +2,8 @@
 
 import os
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from libqtile.command.base import expose_command
 from libqtile.log_utils import logger
@@ -10,11 +11,6 @@ from libqtile.widget.generic_poll_text import GenPollText
 from nectar import Hive
 from nectar.account import Account
 from nectar.nodelist import NodeList
-
-if TYPE_CHECKING:
-    from libqtile.bar import Bar
-    from libqtile.core.manager import Qtile
-
 
 _HIVE_DEFAULT_NODES: Sequence[str] = (
     "https://api.syncad.com",
@@ -59,17 +55,13 @@ class HiveNotifications(GenPollText):
     def __init__(self, **config: Any) -> None:
         super().__init__(**config)
         self.add_defaults(HiveNotifications.defaults)
-        self._hive: Optional[Hive] = None
-        self._account: Optional[Account] = None
-        self._notifications: List[Dict[str, Any]] = []
+        self._hive: Hive | None = None
+        self._account: Account | None = None
+        self._notifications: list[dict[str, Any]] = []
         self._last_fetch: float = 0.0
 
         if not getattr(self, "account", None):
             logger.error("HiveNotifications: 'account' is required")
-
-    def _configure(self, qtile: Qtile, bar: Bar) -> None:
-        super()._configure(qtile, bar)
-        self.timeout_add(0, self.force_update)
 
     def poll(self) -> str:
         try:
@@ -81,7 +73,7 @@ class HiveNotifications(GenPollText):
         count = len(notifications)
         return self.format.format(count=count) if count else self.empty_text
 
-    def _fetch_notifications(self, force: bool = False) -> List[Dict[str, Any]]:
+    def _fetch_notifications(self, force: bool = False) -> list[dict[str, Any]]:
         if not self.account:
             return []
 
@@ -96,8 +88,9 @@ class HiveNotifications(GenPollText):
         if not self._ensure_client():
             return []
 
+        assert self._account is not None
         try:
-            notifications = self._account.get_notifications(  # type: ignore[union-attr]
+            notifications = self._account.get_notifications(
                 only_unread=bool(self.only_unread),
                 limit=int(self.limit or 50),
             )
@@ -114,7 +107,7 @@ class HiveNotifications(GenPollText):
         self._last_fetch = time.time()
         return self._notifications
 
-    def get_notifications(self, force: bool = False) -> List[Dict[str, Any]]:
+    def get_notifications(self, force: bool = False) -> list[dict[str, Any]]:
         try:
             return list(self._fetch_notifications(force=force))
         except Exception:

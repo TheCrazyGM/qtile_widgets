@@ -18,7 +18,7 @@ Example usage in `config.py`:
 
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from libqtile.command.base import expose_command
 from libqtile.log_utils import logger
@@ -83,22 +83,12 @@ class HiveRewards(GenPollText):
             pass
 
         # Client handles
-        self._hive: Optional[Hive] = None
-        self._account: Optional[Account] = None
+        self._hive: Hive | None = None
+        self._account: Account | None = None
 
         # Validate required parameters
         if not getattr(self, "account", None):
             logger.error("HiveRewards: 'account' is required.")
-
-    def timer_setup(self) -> None:
-        """Set up periodic polling and trigger an immediate refresh once loaded."""
-        # Let GenPollText set up its timer machinery
-        super().timer_setup()
-        # Kick off an immediate update so the widget isn't blank/stale until first interval
-        try:
-            self.refresh()
-        except Exception as e:
-            logger.debug("HiveRewards: initial refresh failed: %s", e)
 
     # ------------------------------------------------------------------
     # Initialization helpers
@@ -149,6 +139,7 @@ class HiveRewards(GenPollText):
         if not self._ensure_client():
             return self.error_text
 
+        assert self._account is not None
         try:
             # Refresh account data so reward fields reflect latest chain state
             try:
@@ -176,15 +167,4 @@ class HiveRewards(GenPollText):
     @expose_command()
     def refresh(self) -> None:
         """Trigger an immediate poll and update of the widget text."""
-
-        def _do_refresh() -> None:
-            try:
-                text = self.poll()
-                self.update(text)
-            except Exception as e:
-                logger.error("HiveRewards: refresh failed: %s", e)
-
-        try:
-            self.timeout_add(0, _do_refresh)
-        except Exception as e:
-            logger.error("HiveRewards: failed to schedule refresh: %s", e)
+        self.force_update()

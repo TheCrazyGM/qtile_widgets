@@ -60,7 +60,7 @@ _CHANGE_SUFFIX = "_24h_change"
 class CoinGeckoTicker(GenPollUrl):
     """A cryptocurrency ticker that fetches prices from CoinGecko."""
 
-    defaults = [  # noqa: RUF012
+    defaults = [
         (
             "currency",
             _DEFAULT_CURRENCY,
@@ -146,7 +146,7 @@ class CoinGeckoTicker(GenPollUrl):
             self.symbol = "$"
         if self.api_key is None:
             self.api_key = os.environ.get("COINGECKO_API_KEY")
-        self._base_foreground: str | None = None
+        self._base_foreground: Any = None
         self._last_rendered: str | None = None
         self._session: aiohttp.ClientSession | None = None
 
@@ -155,7 +155,11 @@ class CoinGeckoTicker(GenPollUrl):
     # ---------------------------------------------------------------------
     @property
     def url(self) -> str:
-        base = "https://pro-api.coingecko.com/api/v3/simple/price" if self.is_pro else _API_URL
+        base = (
+            "https://pro-api.coingecko.com/api/v3/simple/price"
+            if self.is_pro
+            else _API_URL
+        )
         currency = self.currency.lower()
         crypto_id = self._get_crypto_id().lower()
         query = f"?ids={crypto_id}&vs_currencies={currency}"
@@ -165,14 +169,16 @@ class CoinGeckoTicker(GenPollUrl):
 
     async def apoll(self) -> str:
         """Fetch price from CoinGecko with graceful error handling and API key support."""
-        if not self.parse or not self.url:
+        if not self.url:
             return "Invalid config"
 
         headers = self.headers.copy()
         if self.api_key:
             header_name = "x-cg-pro-api-key" if self.is_pro else "x-cg-demo-api-key"
             headers[header_name] = self.api_key
-        headers.setdefault("User-Agent", "Mozilla/5.0 (compatible; QtileCoinGeckoTicker/1.0)")
+        headers.setdefault(
+            "User-Agent", "Mozilla/5.0 (compatible; QtileCoinGeckoTicker/1.0)"
+        )
         headers.setdefault("Accept", "application/json")
 
         try:
@@ -268,8 +274,10 @@ class CoinGeckoTicker(GenPollUrl):
                 if (self.retain_on_error and self._last_rendered)
                 else f"{self.crypto}: Err"
             )
-        except Exception:  # noqa: BLE001
-            logger.exception("CoinGeckoTicker (%s): unexpected error polling widget", self.crypto)
+        except Exception:
+            logger.exception(
+                "CoinGeckoTicker (%s): unexpected error polling widget", self.crypto
+            )
             return (
                 self._last_rendered
                 if (self.retain_on_error and self._last_rendered)
@@ -398,6 +406,7 @@ class CoinGeckoTicker(GenPollUrl):
             colour = self.foreground_down or self._base_foreground
 
         if colour:
-            if getattr(self, "layout", None):
-                self.layout.colour = colour
+            layout = getattr(self, "layout", None)
+            if layout is not None:
+                layout.colour = colour
             self.foreground = colour
